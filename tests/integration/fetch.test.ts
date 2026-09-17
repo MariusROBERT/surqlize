@@ -19,11 +19,22 @@ describe("nested FETCH integration tests", () => {
 		moment: t.date(),
 	});
 
+	const comment = table("comment", {
+		body: t.string(),
+	});
+
+	const notification = table("notification", {
+		target: t.union([t.record("product"), t.record("comment")]),
+	});
+
 	const getTestDb = withTestDb({
 		setup: async ({ surreal }) => {
 			await surreal.query(`
 				CREATE author:alice SET name = "Alice";
 				CREATE product:widget SET title = "Widget", author = author:alice;
+				CREATE comment:welcome SET body = "Welcome!";
+				CREATE notification:product SET target = product:widget;
+				CREATE notification:comment SET target = comment:welcome;
 				RELATE user:bob->purchased->product:widget SET moment = time::now();
 			`);
 		},
@@ -62,5 +73,24 @@ describe("nested FETCH integration tests", () => {
 		// Not fetched -> remains a RecordId
 		expect(out.author).toBeInstanceOf(RecordId);
 		expect(String(out.author)).toBe("author:alice");
+	});
+
+	test("fetches polymorphic notification targets", async () => {
+		const { surreal } = getTestDb();
+		const db = orm(surreal, author, product, purchased, comment, notification);
+
+		const result = await db.select("notification").fetch("target").execute();
+
+		expect(result).toHaveLength(2);
+		expect(
+			result.some(
+				({ target }) => "title" in target && target.title === "Widget",
+			),
+		).toBe(true);
+		expect(
+			result.some(
+				({ target }) => "body" in target && target.body === "Welcome!",
+			),
+		).toBe(true);
 	});
 });

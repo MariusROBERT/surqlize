@@ -10,6 +10,7 @@ import {
 	OptionType,
 	RecordType,
 	t,
+	UnionType,
 } from "../types";
 import { type Actionable, actionable } from "../utils/actionable.ts";
 import { type DisplayContext, displayContext } from "../utils/display.ts";
@@ -89,11 +90,17 @@ type ResolveLink<O extends Orm, F extends AbstractType> =
 		? Tb extends keyof O["tables"] & string
 			? O["tables"][Tb]["schema"]
 			: F
-		: F extends OptionType<infer Inner extends AbstractType>
-			? OptionType<ResolveLink<O, Inner>>
-			: F extends ArrayType<infer Inner extends AbstractType>
-				? ArrayType<ResolveLink<O, Inner>>
-				: F;
+		: F extends UnionType<infer Members extends AbstractType[]>
+			? UnionType<{
+					[K in keyof Members]: Members[K] extends AbstractType
+						? ResolveLink<O, Members[K]>
+						: never;
+				}>
+			: F extends OptionType<infer Inner extends AbstractType>
+				? OptionType<ResolveLink<O, Inner>>
+				: F extends ArrayType<infer Inner extends AbstractType>
+					? ArrayType<ResolveLink<O, Inner>>
+					: F;
 
 /**
  * Resolve a record link and then continue fetching `Tails` within the resolved
@@ -109,13 +116,19 @@ type ResolveNested<
 		? Tb extends keyof O["tables"] & string
 			? FetchedSchema<O, O["tables"][Tb]["schema"], Tails>
 			: F
-		: F extends OptionType<infer Inner extends AbstractType>
-			? OptionType<ResolveNested<O, Inner, Tails>>
-			: F extends ArrayType<infer Inner extends AbstractType>
-				? ArrayType<ResolveNested<O, Inner, Tails>>
-				: F extends ObjectType<ObjectTypeInner>
-					? FetchedSchema<O, F, Tails>
-					: F;
+		: F extends UnionType<infer Members extends AbstractType[]>
+			? UnionType<{
+					[K in keyof Members]: Members[K] extends AbstractType
+						? ResolveNested<O, Members[K], Tails>
+						: never;
+				}>
+			: F extends OptionType<infer Inner extends AbstractType>
+				? OptionType<ResolveNested<O, Inner, Tails>>
+				: F extends ArrayType<infer Inner extends AbstractType>
+					? ArrayType<ResolveNested<O, Inner, Tails>>
+					: F extends ObjectType<ObjectTypeInner>
+						? FetchedSchema<O, F, Tails>
+						: F;
 
 /** Resolve a single fetched field given the nested paths (if any) beneath it. */
 type FetchField<O extends Orm, F extends AbstractType, Tails extends string> = [
@@ -531,14 +544,30 @@ function resolveFetchField(
 		}
 		return fieldType;
 	}
+	if (fieldType instanceof UnionType) {
+		return new UnionType(
+			fieldType.schema.map((member: AbstractType) =>
+				resolveFetchField(member, tails, orm),
+			),
+		);
+	}
 	if (fieldType instanceof OptionType) {
 		return new OptionType(resolveFetchField(fieldType.schema, tails, orm));
 	}
-	if (fieldType instanceof ArrayType && !Array.isArray(fieldType.schema)) {
-		return new ArrayType(resolveFetchField(fieldType.schema, tails, orm));
+	if (fieldType instanceof ArrayType) {
+		return resolveFetchArray(fieldType, tails, orm);
 	}
 	if (fieldType instanceof ObjectType && tails.length > 0) {
 		return resolveFetchObject(fieldType, tails, orm);
 	}
 	return fieldType;
+}
+
+function resolveFetchArray(
+	fieldType: ArrayType,
+	tails: string[],
+	orm: Orm,
+): AbstractType {
+	if (Array.isArray(fieldType.schema)) return fieldType;
+	return new ArrayType(resolveFetchField(fieldType.schema, tails, orm));
 }
