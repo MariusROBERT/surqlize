@@ -27,6 +27,10 @@ describe("nested FETCH integration tests", () => {
 		target: t.union([t.record("product"), t.record("comment")]),
 	});
 
+	const multiTableNotification = table("multi_table_notification", {
+		target: t.record(["product", "comment"]),
+	});
+
 	const getTestDb = withTestDb({
 		setup: async ({ surreal }) => {
 			await surreal.query(`
@@ -35,6 +39,8 @@ describe("nested FETCH integration tests", () => {
 				CREATE comment:welcome SET body = "Welcome!";
 				CREATE notification:product SET target = product:widget;
 				CREATE notification:comment SET target = comment:welcome;
+				CREATE multi_table_notification:product SET target = product:widget;
+				CREATE multi_table_notification:comment SET target = comment:welcome;
 				RELATE user:bob->purchased->product:widget SET moment = time::now();
 			`);
 		},
@@ -80,6 +86,35 @@ describe("nested FETCH integration tests", () => {
 		const db = orm(surreal, author, product, purchased, comment, notification);
 
 		const result = await db.select("notification").fetch("target").execute();
+
+		expect(result).toHaveLength(2);
+		expect(
+			result.some(
+				({ target }) => "title" in target && target.title === "Widget",
+			),
+		).toBe(true);
+		expect(
+			result.some(
+				({ target }) => "body" in target && target.body === "Welcome!",
+			),
+		).toBe(true);
+	});
+
+	test("fetches multi-table record targets", async () => {
+		const { surreal } = getTestDb();
+		const db = orm(
+			surreal,
+			author,
+			product,
+			purchased,
+			comment,
+			multiTableNotification,
+		);
+
+		const result = await db
+			.select("multi_table_notification")
+			.fetch("target")
+			.execute();
 
 		expect(result).toHaveLength(2);
 		expect(

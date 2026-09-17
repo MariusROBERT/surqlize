@@ -532,14 +532,23 @@ function resolveFetchField(
 ): AbstractType {
 	if (fieldType instanceof RecordType) {
 		const tb = fieldType.tb;
-		// A multi-table link (`record<a | b>`) has no single schema to expand
-		// into, so leave it unresolved rather than coercing the array to a key.
 		if (typeof tb === "string") {
 			const target = orm.tables[tb];
 			if (target) {
 				return tails.length === 0
 					? target.schema
 					: resolveFetchObject(target.schema, tails, orm);
+			}
+		} else if (Array.isArray(tb)) {
+			const targets = tb.map((table) => orm.tables[table]);
+			if (targets.every((target) => target)) {
+				return new UnionType(
+					targets.map((target) =>
+						tails.length === 0
+							? target!.schema
+							: resolveFetchObject(target!.schema, tails, orm),
+					),
+				);
 			}
 		}
 		return fieldType;
