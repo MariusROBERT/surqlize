@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RecordId } from "surrealdb";
+import { RecordId, Surreal } from "surrealdb";
 import { edge, orm, t, table } from "../../src";
 import { withTestDb } from "./setup";
 
@@ -12,6 +12,7 @@ describe("nested FETCH integration tests", () => {
 
 	const product = table("product", {
 		title: t.string(),
+		label: t.string(),
 		author: t.record("author"),
 	});
 
@@ -21,6 +22,7 @@ describe("nested FETCH integration tests", () => {
 
 	const comment = table("comment", {
 		body: t.string(),
+		label: t.string(),
 	});
 
 	const notification = table("notification", {
@@ -35,8 +37,8 @@ describe("nested FETCH integration tests", () => {
 		setup: async ({ surreal }) => {
 			await surreal.query(`
 				CREATE author:alice SET name = "Alice";
-				CREATE product:widget SET title = "Widget", author = author:alice;
-				CREATE comment:welcome SET body = "Welcome!";
+				CREATE product:widget SET title = "Widget", label = "Product", author = author:alice;
+				CREATE comment:welcome SET body = "Welcome!", label = "Comment";
 				CREATE notification:product SET target = product:widget;
 				CREATE notification:comment SET target = comment:welcome;
 				CREATE multi_table_notification:product SET target = product:widget;
@@ -127,5 +129,62 @@ describe("nested FETCH integration tests", () => {
 				({ target }) => "body" in target && target.body === "Welcome!",
 			),
 		).toBe(true);
+	});
+
+	test("projects fields from fetched multi-table record targets", async () => {
+		const { surreal } = getTestDb();
+		const db = orm(surreal, author, product, comment, multiTableNotification);
+
+		const result = await db
+			.select("multi_table_notification")
+			.fetch("target")
+			.return((row) => ({ label: row.target.label }))
+			.execute();
+
+		expect(result.map(({ label }) => label).sort()).toEqual([
+			"Comment",
+			"Product",
+		]);
+	});
+
+	test("infers fields from both polymorphic FETCH forms", () => {
+		const db = orm(
+			new Surreal(),
+			author,
+			product,
+			comment,
+			notification,
+			multiTableNotification,
+		);
+		const unionQuery = db
+			.select("notification")
+			.fetch("target", "target.author");
+		type UnionRow = t.infer<typeof unionQuery>[number];
+		const assertUnion = (row: UnionRow) => {
+			if ("title" in row.target) {
+				const title: string = row.target.title;
+				const authorName: string = row.target.author.name;
+				return [title, authorName];
+			}
+			const body: string = row.target.body;
+			return [body];
+		};
+
+		const multiTableQuery = db
+			.select("multi_table_notification")
+			.fetch("target", "target.author");
+		type MultiTableRow = t.infer<typeof multiTableQuery>[number];
+		const assertMultiTable = (row: MultiTableRow) => {
+			if ("title" in row.target) {
+				const title: string = row.target.title;
+				const authorName: string = row.target.author.name;
+				return [title, authorName];
+			}
+			const body: string = row.target.body;
+			return [body];
+		};
+
+		expect(typeof assertUnion).toBe("function");
+		expect(typeof assertMultiTable).toBe("function");
 	});
 });
