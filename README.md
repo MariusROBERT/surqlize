@@ -1017,6 +1017,7 @@ db.select("post").return((post) => ({
   unique: post.tags.distinct(),    // Unique values
   flat: post.tags.flatten(),       // Flatten nested arrays
   reversed: post.tags.reverse(),   // Reverse array
+  map: post.tags.map((tag, index) => tag.uppercase()) // Map array
 }));
 ```
 
