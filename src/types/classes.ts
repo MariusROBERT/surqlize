@@ -1,4 +1,4 @@
-import { Duration, RecordId, Uuid } from "surrealdb";
+import { Duration, GeometryPoint, RecordId, Uuid } from "surrealdb";
 import { TypeParseError } from "../error";
 
 /** Matches strings usable as a bare SurrealQL identifier in an idiom path. */
@@ -173,6 +173,15 @@ export class DurationType extends AbstractType<Duration> {
 	parse(value: unknown): this["infer"] {
 		if (value instanceof Duration) return value;
 		throw new TypeParseError(this.name, this.expected, value);
+	}
+}
+
+export class PointType extends AbstractType<GeometryPoint> {
+	name = "point" as const;
+	expected = "GeometryPoint";
+
+	validate(value: unknown): value is this["infer"] {
+		return value instanceof GeometryPoint;
 	}
 }
 

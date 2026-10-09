@@ -12,6 +12,7 @@ import {
 	NumberType,
 	ObjectType,
 	OptionType,
+	PointType,
 	RecordType,
 	StringType,
 	UnionType,
@@ -57,6 +58,11 @@ export function date() {
 /** Create a duration type. */
 export function duration() {
 	return new DurationType();
+}
+
+/** Create a native SurrealDB point type. */
+export function point() {
+	return new PointType();
 }
 
 /** Create a UUID type. */

@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { Duration, Surreal } from "surrealdb";
-import { __type, edge, orm, t, table } from "../../../src";
+import { Duration, GeometryPoint, Surreal } from "surrealdb";
+import {
+	__display,
+	__type,
+	displayContext,
+	edge,
+	orm,
+	PointType,
+	t,
+	table,
+} from "../../../src";
 
 // Compile-time equality assertion helper.
 type Equal<A, B> =
@@ -115,5 +124,20 @@ describe("orm() value inference", () => {
 
 		expect(value[__type].name).toBe("duration");
 		expect(typed).toBe(duration);
+	});
+
+	test("infers and binds GeometryPoint values as points", () => {
+		const db = orm(new Surreal(), user);
+		const point = new GeometryPoint([10, 20]);
+		const value = db.value(point);
+		const ctx = displayContext();
+
+		type Value = t.infer<typeof value>;
+		const typed: Value = point;
+
+		expect(value[__type]).toBeInstanceOf(PointType);
+		expect(value[__display](ctx)).toBe("$_v0");
+		expect(ctx.variables._v0).toBe(point);
+		expect(typed).toBe(point);
 	});
 });
